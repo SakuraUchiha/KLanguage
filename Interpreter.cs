@@ -1,4 +1,5 @@
-﻿using System;
+﻿using KLanguage.ExpressionParser;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -130,20 +131,32 @@ namespace KLanguage
                     }
                 }
             }
-            else if (cmd.Contains("Print"))
+            if (cmd.Contains("Print"))
             {
                 if (args.Length > 1)
                     throw new Exception("Too many arguments!");
 
                 if (args.Length > 0)
-                    Console.WriteLine(args[0]);
+                    Console.WriteLine(Convert.ToString(args[0]));
             }
-            else if (cmd.Contains("Read"))
+            if (cmd.Contains("Read"))
             {
                 Console.WriteLine("Input: ");
                 return Console.ReadLine();
             }
-            else if (cmd.Contains("Variable"))
+            if (cmd.Contains("@"))
+            {
+                var expression = cmd.Split('@')[1];
+
+                foreach (var name in variables.Keys)
+                {
+                    if (expression.Contains(name))
+                        expression = expression.Replace(name, Convert.ToString(variables[name]));
+                }
+
+                return Parser.Parse(expression).Eval();
+            }
+            if (cmd.Contains("Variable"))
             {
                 var name = args[0];
                 var type = args[1];
@@ -168,6 +181,13 @@ namespace KLanguage
                         value = (float)r.Next(int.MinValue, int.MaxValue);
                     else if (type == "B")
                         value = r.Next(0, 2) == 1 ? true : false;
+                }
+                else if (args[2].Contains("@"))
+                {
+                    if (type != "N")
+                        throw new Exception("Wrong type exception!");
+
+                    value = (float)ExecuteCommand(args[2]);
                 }
                 else
                 {
@@ -212,7 +232,7 @@ namespace KLanguage
             {
                 dynamic result = null;
 
-                if (command.Contains("Else") && !command.Contains("If"))
+                if (command.Contains("Else") && !command.Contains("If") && !command.Contains("Eval"))
                 {
                     if (command != lines.First() && (lines[lines.IndexOf(command) - 1].Contains("If")))
                     {
@@ -239,7 +259,7 @@ namespace KLanguage
                     }
                 }
 
-                if (command.Contains("Else If"))
+                if (command.Contains("Else If") && !command.Contains("Eval"))
                 {
                     if (command != lines.First() && lines[lines.IndexOf(command) - 1].Contains("If"))
                     {
@@ -267,7 +287,6 @@ namespace KLanguage
                     result = ExecuteCommand(command);
                     continue;
                 }
-                
 
                 if (command.Contains("Loop"))
                 {
@@ -282,7 +301,6 @@ namespace KLanguage
                     commands.Add(cmd[i]);
 
                 commands.Reverse();
-
 
                 foreach (var instruction in commands)
                 {
