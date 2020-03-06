@@ -108,23 +108,25 @@ namespace KLanguage
                     {
                         if (current[0] == current[1])
                             ExecuteCode(code);
+                        return current[0] == current[1];
                     }
                     else if (op == '<')
                     {
                         if (current[0] < current[1])
-                        {
                             ExecuteCode(code);
-                        }
+                        return current[0] < current[1];
                     }
                     else if (op == '>')
                     {
                         if (current[0] > current[1])
                             ExecuteCode(code);
+                        return current[0] > current[1];
                     }
                     else if (op == '!')
                     {
                         if (current[0] != current[1])
                             ExecuteCode(code);
+                        return current[0] != current[1];
                     }
                 }
             }
@@ -208,11 +210,65 @@ namespace KLanguage
 
             foreach (var command in lines)
             {
-                if (command.Contains("If"))
+                dynamic result = null;
+
+                if (command.Contains("Else") && !command.Contains("If"))
                 {
-                    ExecuteCommand(command);
+                    if (command != lines.First() && (lines[lines.IndexOf(command) - 1].Contains("If")))
+                    {
+                        bool r = Convert.ToBoolean(result);
+
+                        if (r == false)
+                        {
+                            var embeddedCode = command.Split('[')[1].Split(']')[0].Split('/');
+                            var c = "";
+
+                            foreach (var l in embeddedCode)
+                            {
+                                if (l == embeddedCode.First())
+                                {
+                                    c += l;
+                                    continue;
+                                }
+                                c += "\n" + l;
+                            }
+
+                            ExecuteCode(c);
+                            continue;
+                        }
+                    }
+                }
+
+                if (command.Contains("Else If"))
+                {
+                    if (command != lines.First() && lines[lines.IndexOf(command) - 1].Contains("If"))
+                    {
+                        bool r = Convert.ToBoolean(result);
+
+                        if (r == false)
+                        {
+                            var c = command.Split('(')[1];
+
+                            string x = "If(";
+
+                            for (int i = 0; i < c.Length; ++i)
+                                x += c[i];
+
+                            result = ExecuteCommand(command);
+
+                            continue;
+                        }
+                    }
                     continue;
                 }
+
+                if (command.Contains("If"))
+                {
+                    result = ExecuteCommand(command);
+                    continue;
+                }
+                
+
                 if (command.Contains("Loop"))
                 {
                     ExecuteCommand(command);
@@ -227,7 +283,6 @@ namespace KLanguage
 
                 commands.Reverse();
 
-                dynamic result = null;
 
                 foreach (var instruction in commands)
                 {
