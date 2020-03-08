@@ -13,6 +13,8 @@ namespace KLanguage
     public class Interpreter
     {
         private Dictionary<string, dynamic> variables = new Dictionary<string, dynamic>(); //Stores all variables defined in program
+        private Dictionary<string, string> functions = new Dictionary<string, string>(); //Stores all functions
+        private Dictionary<string[], dynamic> methods = new Dictionary<string[], dynamic>(); //Stores all methods
 
         private Random r = new Random(); //Random number generator
         private Expression parser = new Expression(); //Mathematical and logical expression parser
@@ -29,8 +31,94 @@ namespace KLanguage
         //Executes command of given name and arguments
         public dynamic ExecuteCommand(string cmd, params dynamic[] args)
         {
+            //Defines Function
+            if (cmd.Contains("Function"))
+            {
+                var name = (string)Convert.ToString(args[0]);
+                var embeddedCode = ((string)Convert.ToString(args[1])).Split('[')[1].Split(']')[0].Split('/');
+
+                var code = "";
+
+                foreach (var line in embeddedCode)
+                {
+                    if (line == embeddedCode.First())
+                    {
+                        code += line;
+                        continue;
+                    }
+
+                    code += "\n" + line;
+                }
+
+                functions.Add(name, code);
+            }
+            //Defines Method
+            else if (cmd.Contains("Method"))
+            {
+                var type = (string)Convert.ToString(args[0]);
+                var name = (string)Convert.ToString(args[1]);
+                var embeddedCode = ((string)Convert.ToString(args[2])).Split('[')[1].Split(']')[0].Split('/');
+                var returnValueRaw = ((string)Convert.ToString(args[2]));
+
+                var c = returnValueRaw.ToCharArray();
+
+                bool add = false;
+
+                for (int i = 0; i < c.Length; ++i)
+                {
+                    var x = c[i];
+
+                    if (x == '=' && c[i - 1] == ']')
+                    {
+                        add = true;
+                        returnValueRaw = "";
+                        continue;
+                    }
+
+                    if (add)
+                    {
+                        returnValueRaw += x;
+                    }
+                }
+
+                dynamic returnValue = null;
+
+                if (returnValueRaw.Contains("var:"))
+                {
+                    returnValue = returnValueRaw;
+                }
+                else
+                {
+                    if (type == "N")
+                        returnValue = float.Parse(returnValueRaw);
+                    else if (type == "T")
+                        returnValue = returnValueRaw;
+                    else if (type == "B")
+                        returnValue = bool.Parse(returnValueRaw);
+                }
+
+                var code = "";
+
+                foreach (var line in embeddedCode)
+                {
+                    if (line == embeddedCode.First())
+                    {
+                        code += line;
+                        continue;
+                    }
+
+                    code += "\n" + line;
+                }
+
+                string[] key = new string[] { type, name, code };
+
+                if (!methods.ContainsKey(key))
+                {
+                    methods.Add(key, returnValue);
+                }
+            }
             //Defines Loop
-            if (cmd.Contains("Loop"))
+            else if (cmd.Contains("Loop"))
             {
                 //Loop[Print#!a]:n
                 //Gets code to repeat as array of lines
@@ -130,7 +218,7 @@ namespace KLanguage
                 foreach (var name in variables.Keys)
                 {
                     if (expression.Contains(name))
-                        expression = expression.Replace(name, Convert.ToString(variables[name]));
+                        expression = expression.Replace(name, Convert.ToString(variables[name]) + "f");
                 }
 
                 return parser.Evaluate(expression); //Calculates value of expression and returns it
@@ -148,11 +236,11 @@ namespace KLanguage
 
                     //Converts input to given type of variable
                     if (type == "T")
-                        value = Console.ReadLine();
+                        value = result;
                     else if (type == "N")
-                        value = float.Parse(Console.ReadLine());
+                        value = float.Parse(result);
                     else if (type == "B")
-                        value = bool.Parse(Console.ReadLine());
+                        value = bool.Parse(result);
                 }
                 else if (args[2] == "$") //Random value operator - sets value of variable to random from given type's range
                 {
@@ -262,6 +350,74 @@ namespace KLanguage
             {
                 dynamic result = null; //Stores return value of executed command
 
+                if (command.Contains("Function"))
+                {
+                    var raw = command.ToCharArray();
+
+                    var name = "";
+                    var current = "";
+
+                    var args = new List<string>();
+
+                    for(int i = 0; i < raw.Length; ++i)
+                    {
+                        var x = raw[i];
+
+                        if (x == '#' && name == "")
+                        {
+                            name = current;
+                            current = "";
+                            continue;
+                        }
+
+                        if (x == ';' && args.Count < 1)
+                        {
+                            args.Add(current);
+                            current = "";
+                            continue;
+                        }
+
+                        current += x;
+                    }
+                    args.Add(current);
+
+                    ExecuteCommand(name, args.ToArray());
+                    continue;
+                }
+                else if (command.Contains("Method"))
+                {
+                    var raw = command.ToCharArray();
+
+                    var name = "";
+                    var current = "";
+
+                    var args = new List<string>();
+
+                    for (int i = 0; i < raw.Length; ++i)
+                    {
+                        var x = raw[i];
+
+                        if (x == '#' && name == "")
+                        {
+                            name = current;
+                            current = "";
+                            continue;
+                        }
+
+                        if (x == ';' && args.Count < 2)
+                        {
+                            args.Add(current);
+                            current = "";
+                            continue;
+                        }
+
+                        current += x;
+                    }
+                    args.Add(current);
+
+                    ExecuteCommand(name, args.ToArray());
+                    continue;
+                }
                 //Defines logic for Else structure
                 if (command.Contains("Else") && !command.Contains("If"))
                 {
@@ -363,6 +519,40 @@ namespace KLanguage
                         if (variables.ContainsKey(name))
                         {
                             result = variables[name]; //returns value of given variable
+                            continue;
+                        }
+                        else if (methods.Keys.ToList().Find(x => x[1] == name) != null)
+                        {
+                            int i = methods.ToList().FindIndex(x => x.Key[1] == name);
+                            ExecuteCode(methods.ElementAt(i).Key[2]);
+
+                            string value = Convert.ToString(methods.ElementAt(i).Value);
+                            string type = Convert.ToString(methods.ElementAt(i).Key[0]);
+
+                            if (value.Contains("var:"))
+                            {
+                                foreach (var variable in variables)
+                                {
+                                    if (value.Split(':')[1].Contains(variable.Key))
+                                    {
+                                        value = value.Split(':')[1].Replace(variable.Key, Convert.ToString(variable.Value));
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (type == "N")
+                                result = float.Parse(value);
+                            else if (type == "T")
+                                result = value;
+                            else if (type == "B")
+                                result = bool.Parse(value);
+
+                            continue;
+                        }
+                        else if (functions.ContainsKey(name))
+                        {
+                            ExecuteCode(functions[name]);
                             continue;
                         }
                     }
