@@ -28,6 +28,34 @@ namespace KLanguage
             }
         }
 
+        public void ExecuteLoop(string code, string condition)
+        {
+            var c = condition;
+
+            foreach (var variable in variables)
+            {
+                if (c.Contains("var:" + variable.Key))
+                    c = c.Replace("var:" + variable.Key, Convert.ToString(variable.Value));
+            }
+
+            bool value = Convert.ToBoolean(parser.Evaluate(c));
+
+            while (value == true)
+            {
+                ExecuteCode(code);
+
+                c = condition;
+
+                foreach (var variable in variables)
+                {
+                    if (c.Contains("var:" + variable.Key))
+                        c = c.Replace("var:" + variable.Key, Convert.ToString(variable.Value));
+                }
+
+                value = Convert.ToBoolean(parser.Evaluate(c));
+            }
+        }
+
         //Executes command of given name and arguments
         public dynamic ExecuteCommand(string cmd, params dynamic[] args)
         {
@@ -123,8 +151,6 @@ namespace KLanguage
                 //Loop[Print#!a]:n
                 //Gets code to repeat as array of lines
                 var embeddedCode = cmd.Split('[')[1].Split(']')[0].Split('/');
-                //Gets how many times to repeat
-                int times = int.Parse(cmd.Split(':')[1]);
 
                 var code = "";
 
@@ -138,9 +164,44 @@ namespace KLanguage
                     }
                     code += "\n" + line;
                 }
+                //Gets how many times to repeat or a condition
+                var timesRaw = cmd.Split(':')[1];
 
-                //Execute loop
-                ExecuteLoop(code, times);
+                if (timesRaw.Contains('('))
+                {
+                    int i = 2;
+
+                    while (timesRaw.Contains("var") && i < cmd.Split(':').Length)
+                    {
+                        timesRaw += ":" + cmd.Split(':')[i];
+                        ++i;
+                    }
+
+                    var condition = timesRaw.Split('(')[1].Split(')')[0].Replace(" ", "");
+
+                    ExecuteLoop(code, condition);
+                }
+                else
+                {
+                    if (timesRaw.Contains("var"))
+                    {
+                        timesRaw = cmd.Split(':')[2];
+                    }
+
+                    foreach (var variable in variables)
+                    {
+                        if (timesRaw.Contains(variable.Key))
+                        {
+                            timesRaw = timesRaw.Replace(variable.Key, Convert.ToString(variable.Value));
+                            break;
+                        }
+                    }
+
+                    int times = int.Parse(timesRaw);
+
+                    //Execute loop
+                    ExecuteLoop(code, times);
+                }
             }
             //Defines If
             else if (cmd.Contains("If"))
