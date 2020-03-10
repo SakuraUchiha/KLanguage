@@ -13,6 +13,7 @@ namespace KLanguage
     public class Interpreter
     {
         private Dictionary<string, dynamic> variables = new Dictionary<string, dynamic>(); //Stores all variables defined in program
+        private Dictionary<string, dynamic> constants = new Dictionary<string, dynamic>(); //Stores all constants defined in program
         private Dictionary<string, string> functions = new Dictionary<string, string>(); //Stores all functions
         private Dictionary<string[], dynamic> methods = new Dictionary<string[], dynamic>(); //Stores all methods
 
@@ -272,17 +273,23 @@ namespace KLanguage
                     raw += cmd[i];
                 }
 
-                //Deletes spaces
-                var expression = raw.Replace(" ", "");
-
                 //Replaces any variables with their values
                 foreach (var name in variables.Keys)
                 {
-                    if (expression.Contains(name))
-                        expression = expression.Replace(name, Convert.ToString(variables[name]) + "f");
+                    float x = 0;
+
+                    if (raw.Contains("var:" + name))
+                    {
+                        if (float.TryParse(Convert.ToString(variables[name]), out x))
+                            raw = raw.Replace("var:" + name, x + "f");
+
+                        raw = raw.Replace("var:" + name, Convert.ToString(variables[name]));
+                    }
                 }
 
-                return parser.Evaluate(expression); //Calculates value of expression and returns it
+                var expression = raw.Replace(" ", "");
+
+                return Convert.ToString(parser.Evaluate(expression)); //Calculates value of expression and returns it
             }
             //Defines variable logic
             else if (cmd.Contains("Variable"))
@@ -290,6 +297,30 @@ namespace KLanguage
                 var name = args[0]; //Gets name of variable
                 var type = args[1]; //Gets type of variable
                 dynamic value = null; //Creates non-type variable to store value
+
+                if (type == "const")
+                {
+                    var t = args[2];
+
+                    if (t == "N")
+                        value = double.Parse(args[3]);
+                    else if (t == "T")
+                        value = args[3];
+                    else if (t == "B")
+                        value = bool.Parse(args[3]);
+
+                    if (constants.ContainsKey(name))
+                    {
+                        throw new Exception("You are either trying to create constant that already exists or change value of the constant!");
+                    }
+
+                    constants.Add(name, value);
+
+                    return null;
+                }
+
+                if (constants.ContainsKey(name))
+                    throw new Exception("You are either trying to create constant that already exists or change value of the constant!");
 
                 if (args[2] == "&") //Read operator - set value of variable to result of Read function
                 {
@@ -317,7 +348,7 @@ namespace KLanguage
                     if (type != "N")
                         throw new Exception("Wrong type exception!");
 
-                    value = (float)ExecuteCommand(args[2]); //Parses value of expression to number
+                    value = float.Parse(ExecuteCommand(args[2])); //Parses value of expression to number
                 }
                 else if (args[2].Contains("FileRead")) //Reads from given file and sets value of variable to result
                 {
@@ -325,6 +356,38 @@ namespace KLanguage
                         throw new Exception("Wrong type exception!");
 
                     value = Convert.ToString(ExecuteCommand(args[2])); //Ensures the result is text
+                }
+                else if (args[2].Contains("!"))
+                {
+                    foreach (var method in methods)
+                    {
+                        if (args[2].Contains(method.Key[1]) && type == method.Key[0])
+                        {
+                            ExecuteCode(method.Key[2]);
+
+                            string result = Convert.ToString(method.Value);
+                            string typeF = Convert.ToString(method.Key[0]);
+
+                            if (result.Contains("var:"))
+                            {
+                                foreach (var var in variables)
+                                {
+                                    if (result.Split(':')[1].Contains(var.Key))
+                                    {
+                                        result = result.Split(':')[1].Replace(var.Key, Convert.ToString(var.Value));
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (type == "N")
+                                value = float.Parse(result);
+                            else if (type == "T")
+                                value = result;
+                            else if (type == "B")
+                                value = bool.Parse(result);
+                        }
+                    }
                 }
                 else
                 {
@@ -410,6 +473,21 @@ namespace KLanguage
             foreach (var command in lines)
             {
                 dynamic result = null; //Stores return value of executed command
+
+                if (command.Contains("Import"))
+                {
+                    var name = command.TrimStart("Import ".ToCharArray());
+
+                    var path = String.Format("{0}/Libraries/{1}.k", Path.GetDirectoryName(Application.ExecutablePath), name);
+
+                    if (!File.Exists(path))
+                        throw new Exception("You're trying to import library that doesn't exist!");
+
+                    var library = File.ReadAllText(path);
+
+                    ExecuteCode(library);
+                    continue;
+                }
 
                 if (command.Contains("Function"))
                 {
@@ -566,7 +644,10 @@ namespace KLanguage
                         var data = instruction.Split('=');
                         var args = data[1].Split(';');
 
-                        result = ExecuteCommand("Variable", data[0], args[0], args[1]);
+                        if (args.Length == 2)
+                            result = ExecuteCommand("Variable", data[0], args[0], args[1]);
+                        else if (args.Length == 3)
+                            result = ExecuteCommand("Variable", data[0], args[0], args[1], args[2]);
                         continue;
                     }
 
@@ -580,6 +661,11 @@ namespace KLanguage
                         if (variables.ContainsKey(name))
                         {
                             result = variables[name]; //returns value of given variable
+                            continue;
+                        }
+                        else if (constants.ContainsKey(name))
+                        {
+                            result = constants[name]; //returns value of given constant
                             continue;
                         }
                         else if (methods.Keys.ToList().Find(x => x[1] == name) != null)
